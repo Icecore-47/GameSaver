@@ -100,7 +100,7 @@
       cert: fs.readFileSync(SSL_CERT_PATH),
     };
 
-    https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
+    https.createServer(httpsOptions, app).listen(HTTPS_PORT,'0.0.0.0', () => {
       console.log(`✅ HTTPS server listening on https://0.0.0.0:${HTTPS_PORT}`);
     });
 
@@ -119,9 +119,9 @@
       res.redirect(targetUrl);
     });
 
-    redirectApp.listen(HTTP_PORT, () => {
-      console.log(`🔁 HTTP redirect server on http://0.0.0.0:${HTTP_PORT}`);
-    });
+redirectApp.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`🔁 HTTP redirect server on http://0.0.0.0:${HTTP_PORT}`);
+});
 
   } catch (e) {
     console.error('❌ Startup error:', e);

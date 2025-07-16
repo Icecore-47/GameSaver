@@ -1,0 +1,44 @@
+# Node dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime and temp files
+*.tmp
+*.temp
+*.swp
+.DS_Store
+
+# Environment config
+.env
+.env.local
+
+# OS junk
+Thumbs.db
+
+# Editor-specific
+.vscode/
+.idea/
+
+# Compiled files
+dist/
+build/
+
+# Persistent app data
+data/models.json
+data/**/*.zip
+data/**/   # optional: all extracted content
+
+# Docker artifacts
+*.pid
+*.sock
+
+# Optional: exclude extracted game content (if in BASE_DIR)
+# Replace with actual path if different
+# For example:
+# /home/user/Projects/GameSaver/ExtractedGames/

@@ -6,6 +6,7 @@
     const path = require('path');
     const unzipper = require('unzipper');
     const https = require('https');
+    const fetch = require('node-fetch');
 
     const BASE_DIR = path.join(__dirname, 'data');
     const MODELS_FILE = path.join(BASE_DIR, 'models.json');
@@ -60,12 +61,21 @@
       try {
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-        const response = await fetch(url);
+        const response = await fetch(url, { redirect: 'follow' });
         if (!response.ok) throw new Error(`Failed to download zip: ${response.statusText}`);
 
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const directory = await unzipper.Open.buffer(buffer);
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/zip') && !contentType.includes('application/octet-stream')) {
+          throw new Error(`Unexpected content-type: ${contentType}`);
+        }
 
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+          throw new Error('Downloaded file is not a valid ZIP archive (missing PK signature)');
+        }
+
+        const directory = await unzipper.Open.buffer(buffer);
         await Promise.all(directory.files.map(file => {
           if (file.type === 'Directory') return;
 
@@ -88,6 +98,7 @@
 
         console.log('✅ Extraction complete and model saved');
         res.json({ message: 'Zip extracted and model stored', model: newModel });
+
       } catch (err) {
         console.error('❌ Error during unzip:', err);
         res.status(500).json({ error: err.message });
@@ -100,7 +111,7 @@
       cert: fs.readFileSync(SSL_CERT_PATH),
     };
 
-    https.createServer(httpsOptions, app).listen(HTTPS_PORT,'0.0.0.0', () => {
+    https.createServer(httpsOptions, app).listen(HTTPS_PORT, '0.0.0.0', () => {
       console.log(`✅ HTTPS server listening on https://0.0.0.0:${HTTPS_PORT}`);
     });
 
@@ -108,20 +119,18 @@
     // Redirect HTTP → HTTPS with logging
     // ──────────────────────────
     const redirectApp = express();
-
     redirectApp.use((req, res) => {
       const originalHost = req.headers.host;
       const redirectHost = originalHost?.replace(/:\d+$/, `:${HTTPS_PORT}`);
       const targetUrl = `https://${redirectHost}${req.url}`;
 
       console.log(`🔁 Redirecting HTTP → HTTPS: ${req.method} http://${originalHost}${req.url} → ${targetUrl}`);
-
       res.redirect(targetUrl);
     });
 
-redirectApp.listen(HTTP_PORT, '0.0.0.0', () => {
-  console.log(`🔁 HTTP redirect server on http://0.0.0.0:${HTTP_PORT}`);
-});
+    redirectApp.listen(HTTP_PORT, '0.0.0.0', () => {
+      console.log(`🔁 HTTP redirect server on http://0.0.0.0:${HTTP_PORT}`);
+    });
 
   } catch (e) {
     console.error('❌ Startup error:', e);

@@ -162,6 +162,38 @@
         res.status(500).json({ error: err.message });
       }
     });
+    app.delete('/models/:folderName', (req, res) => {
+  const folderName = req.params.folderName;
+
+  try {
+    // Load models
+    const models = JSON.parse(fs.readFileSync(MODELS_FILE, 'utf-8'));
+
+    // Remove matching model
+    const filtered = models.filter(m => m.FolderName !== folderName);
+
+    // If nothing changed
+    if (filtered.length === models.length) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+
+    // Save updated list
+    fs.writeFileSync(MODELS_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
+
+    // Delete extracted folder
+    const folderPath = path.join(BASE_DIR, folderName);
+    if (fs.existsSync(folderPath)) {
+      fs.rmSync(folderPath, { recursive: true, force: true });
+      console.log(`🗑️ Deleted folder: ${folderPath}`);
+    }
+
+    res.json({ message: 'Model deleted' });
+  } catch (err) {
+    console.error('❌ Failed to delete model:', err);
+    res.status(500).json({ error: 'Failed to delete model' });
+  }
+});
+
 
     // HTTPS server
     const httpsOptions = {

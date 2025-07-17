@@ -1,80 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Uploaded Models</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col items-center py-10 px-4">
-  <div class="w-full max-w-4xl bg-white rounded-2xl shadow-lg p-6">
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-6">
+
+  <div class="w-full max-w-4xl bg-white shadow-lg rounded-lg p-6">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">📋 Uploaded Models</h1>
-      <a href="/"
-         class="text-blue-600 hover:underline text-sm font-medium transition duration-150 ease-in-out">
-        ⬅️ Back to Upload
-      </a>
+      <h1 class="text-2xl font-bold text-gray-800">📋 Uploaded Models</h1>
+      <a href="/" class="text-blue-600 hover:underline text-sm font-medium">⬅ Back to Upload</a>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full border border-gray-200 text-sm">
-        <thead class="bg-blue-600 text-white uppercase">
-          <tr>
-            <th class="text-left px-4 py-2">Display Name</th>
-            <th class="text-left px-4 py-2">Folder Name</th>
-            <th class="text-left px-4 py-2">Build Name</th>
-          </tr>
-        </thead>
-        <tbody id="modelsTableBody" class="bg-white divide-y divide-gray-200">
-          <!-- Dynamic rows will be inserted here -->
-        </tbody>
-      </table>
-    </div>
-
-    <div id="emptyMessage" class="text-center text-gray-500 mt-6 hidden">
-      No models found.
-    </div>
-
-    <div id="errorMessage" class="text-center text-red-600 mt-6 hidden">
-      Failed to load models.
-    </div>
+    <table class="table-auto w-full border border-gray-300 shadow-sm">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="border px-4 py-2 text-left">Display Name</th>
+          <th class="border px-4 py-2 text-left">Folder Name</th>
+          <th class="border px-4 py-2 text-left">Build Name</th>
+          <th class="border px-4 py-2 text-left">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="modelTableBody" class="text-gray-700 bg-white"></tbody>
+    </table>
   </div>
 
   <script>
-    async function loadModels() {
-      const tbody = document.getElementById('modelsTableBody');
-      const emptyMsg = document.getElementById('emptyMessage');
-      const errorMsg = document.getElementById('errorMessage');
-
+    async function fetchModels() {
       try {
         const res = await fetch('/models');
         const models = await res.json();
 
-        if (!res.ok || !Array.isArray(models)) {
-          throw new Error('Invalid response');
-        }
+        const tbody = document.getElementById('modelTableBody');
+        tbody.innerHTML = '';
 
         if (models.length === 0) {
-          emptyMsg.classList.remove('hidden');
+          tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">No models uploaded yet.</td></tr>`;
           return;
         }
 
         models.forEach(model => {
           const row = document.createElement('tr');
           row.innerHTML = `
-            <td class="px-4 py-2">${model.DisplayName}</td>
-            <td class="px-4 py-2">${model.FolderName}</td>
-            <td class="px-4 py-2">${model.BuildName}</td>
+            <td class="border px-4 py-2">${model.DisplayName}</td>
+            <td class="border px-4 py-2">${model.FolderName}</td>
+            <td class="border px-4 py-2">${model.BuildName}</td>
+            <td class="border px-4 py-2">
+              <button onclick="deleteModel('${model.FolderName}')" class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded">Delete</button>
+            </td>
           `;
           tbody.appendChild(row);
         });
       } catch (err) {
-        errorMsg.classList.remove('hidden');
-        console.error('❌ Error loading models:', err);
+        console.error('Failed to fetch models:', err);
+        document.getElementById('modelTableBody').innerHTML = `
+          <tr><td colspan="4" class="text-center text-red-500 py-4">Error loading models.</td></tr>`;
       }
     }
 
-    loadModels();
+    async function deleteModel(folderName) {
+      if (!confirm(`Are you sure you want to delete "${folderName}"?`)) return;
+
+      try {
+        const res = await fetch(`/models/${folderName}`, { method: 'DELETE' });
+        const result = await res.json();
+
+        if (res.ok) {
+          alert('✅ Deleted successfully.');
+          fetchModels();
+        } else {
+          alert('❌ Failed to delete: ' + result.error);
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    // Initial fetch
+    fetchModels();
   </script>
 </body>
 </html>

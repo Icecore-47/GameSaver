@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Upload ZIP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Upload Game Build</h1>
+        <a href="/items"
+           class="text-blue-600 hover:underline text-sm font-medium transition duration-150 ease-in-out">
+          📋 View Items
+        </a>
+      </div>
+
+      <form id="uploadForm" class="space-y-4" enctype="multipart/form-data" method="POST" action="/upload">
+        <div>
+          <label class="block font-medium mb-1" for="DisplayName">Display Name</label>
+          <input type="text" id="DisplayName" name="DisplayName" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        </div>
+
+        <div>
+          <label class="block font-medium mb-1" for="folderName">Folder Name</label>
+          <input type="text" id="folderName" name="folderName" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        </div>
+
+        <div>
+          <label class="block font-medium mb-1" for="BuildName">Build Name</label>
+          <input type="text" id="BuildName" name="BuildName" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        </div>
+
+        <div>
+          <label class="block font-medium mb-1" for="file">ZIP File</label>
+          <input type="file" id="file" name="file" accept=".zip" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-blue-600 file:text-white hover:file:bg-blue-700"/>
+        </div>
+
+        <button type="submit"
+          class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200">
+          Upload ZIP
+        </button>
+      </form>
+
+      <div id="statusMsg" class="mt-4 text-center font-medium hidden"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const statusMsg = document.getElementById('statusMsg');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusMsg.classList.add('hidden');
+      statusMsg.textContent = '';
+      statusMsg.className = 'mt-4 text-center font-medium hidden';
+
+      const formData = new FormData(form);
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          statusMsg.textContent = '✅ Upload successful!';
+          statusMsg.classList.remove('hidden');
+          statusMsg.classList.add('text-green-600');
+          form.reset();
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (err) {
+        statusMsg.textContent = '❌ Upload failed: ' + err.message;
+        statusMsg.classList.remove('hidden');
+        statusMsg.classList.add('text-red-600');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// index.js – HTTPS with redirect logging
+// index.js – HTTPS with redirect + HTML form + upload support
 (async () => {
   try {
     const express = require('express');
@@ -7,25 +7,31 @@
     const unzipper = require('unzipper');
     const https = require('https');
     const fetch = require('node-fetch');
+    const multer = require('multer');
 
     const BASE_DIR = path.join(__dirname, 'data');
     const MODELS_FILE = path.join(BASE_DIR, 'models.json');
+    const HTML_DIR = __dirname;
+    const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
     const HTTPS_PORT = process.env.HTTPS_PORT || 3100;
     const HTTP_PORT = process.env.HTTP_PORT || 3101;
     const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'key.pem');
     const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.join(__dirname, 'certs', 'cert.pem');
 
+    const upload = multer({ dest: UPLOADS_DIR });
+
     // ──────────────────────────
     // One-off startup checks
     // ──────────────────────────
-    if (!fs.existsSync(BASE_DIR)) {
-      fs.mkdirSync(BASE_DIR, { recursive: true });
-      console.log('✅ Created base directory:', BASE_DIR);
-    }
+    [BASE_DIR, UPLOADS_DIR].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`✅ Created directory: ${dir}`);
+      }
+    });
 
     if (!fs.existsSync(MODELS_FILE)) {
-      fs.mkdirSync(path.dirname(MODELS_FILE), { recursive: true });
       fs.writeFileSync(MODELS_FILE, '[]', 'utf-8');
       console.log('✅ Created models.json file');
     }
@@ -35,6 +41,10 @@
     // ──────────────────────────
     const app = express();
     app.use(express.json());
+
+    // Serve index.html and items.html
+    app.get('/', (req, res) => res.sendFile(path.join(HTML_DIR, 'index.html')));
+    app.get('/items', (req, res) => res.sendFile(path.join(HTML_DIR, 'items.html')));
 
     // GET /models
     app.get('/models', (req, res) => {
@@ -47,7 +57,7 @@
       }
     });
 
-    // POST /unzip
+    // POST /unzip (from URL)
     app.post('/unzip', async (req, res) => {
       const { url, folderName, DisplayName, BuildName } = req.body;
       if (!url || !folderName || !DisplayName || !BuildName) {
@@ -70,7 +80,6 @@
         }
 
         const buffer = Buffer.from(await response.arrayBuffer());
-
         if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
           throw new Error('Downloaded file is not a valid ZIP archive (missing PK signature)');
         }
@@ -78,7 +87,6 @@
         const directory = await unzipper.Open.buffer(buffer);
         await Promise.all(directory.files.map(file => {
           if (file.type === 'Directory') return;
-
           const relativePath = file.path.split('/').slice(1).join(path.sep);
           const outputPath = path.join(outputDir, relativePath);
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -105,6 +113,56 @@
       }
     });
 
+    // POST /upload (from form)
+    app.post('/upload', upload.single('file'), async (req, res) => {
+      const { DisplayName, folderName, BuildName } = req.body;
+      const file = req.file;
+
+      if (!file || !DisplayName || !folderName || !BuildName) {
+        return res.status(400).json({ error: 'Missing file or required fields.' });
+      }
+
+      const zipPath = file.path;
+      const outputDir = path.join(BASE_DIR, folderName);
+
+      try {
+        const buffer = fs.readFileSync(zipPath);
+        if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+          throw new Error('Uploaded file is not a valid ZIP archive.');
+        }
+
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+        const directory = await unzipper.Open.buffer(buffer);
+        await Promise.all(directory.files.map(file => {
+          if (file.type === 'Directory') return;
+
+          const relativePath = file.path.split('/').slice(1).join(path.sep);
+          const outputPath = path.join(outputDir, relativePath);
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+          return new Promise((resolve, reject) => {
+            file.stream()
+              .pipe(fs.createWriteStream(outputPath))
+              .on('finish', resolve)
+              .on('error', reject);
+          });
+        }));
+
+        const newModel = { DisplayName, FolderName: folderName, BuildName };
+        const currentModels = JSON.parse(fs.readFileSync(MODELS_FILE, 'utf-8'));
+        currentModels.push(newModel);
+        fs.writeFileSync(MODELS_FILE, JSON.stringify(currentModels, null, 2), 'utf-8');
+
+        fs.unlinkSync(zipPath); // Cleanup
+        console.log('✅ Uploaded ZIP extracted and model saved');
+        res.json({ message: 'Upload successful', model: newModel });
+      } catch (err) {
+        console.error('❌ Error during file upload:', err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // HTTPS server
     const httpsOptions = {
       key: fs.readFileSync(SSL_KEY_PATH),
@@ -115,15 +173,12 @@
       console.log(`✅ HTTPS server listening on https://0.0.0.0:${HTTPS_PORT}`);
     });
 
-    // ──────────────────────────
-    // Redirect HTTP → HTTPS with logging
-    // ──────────────────────────
+    // HTTP → HTTPS redirect server
     const redirectApp = express();
     redirectApp.use((req, res) => {
       const originalHost = req.headers.host;
       const redirectHost = originalHost?.replace(/:\d+$/, `:${HTTPS_PORT}`);
       const targetUrl = `https://${redirectHost}${req.url}`;
-
       console.log(`🔁 Redirecting HTTP → HTTPS: ${req.method} http://${originalHost}${req.url} → ${targetUrl}`);
       res.redirect(targetUrl);
     });

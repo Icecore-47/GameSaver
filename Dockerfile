@@ -1,23 +1,26 @@
 # Use official Node.js LTS image
-FROM node:latest
+FROM node:18-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy only package.json first for efficient layer caching
+# Copy dependency metadata first (for better cache utilization)
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy rest of the project files
+# Copy remaining project files
 COPY . .
 
-# Create volume for persistent data (models.json, extracted zips)
+# Ensure necessary runtime folders exist
+RUN mkdir -p /app/data /app/uploads
+
+# Mark /app/data as a volume for persistent storage
 VOLUME [ "/app/data" ]
 
-# Expose app port
-EXPOSE 3100
+# Expose both HTTPS and HTTP redirect ports
+EXPOSE 3100 3101
 
-# Start the app
+# Start the server
 CMD ["node", "index.js"]

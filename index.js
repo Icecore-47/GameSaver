@@ -1,4 +1,4 @@
-// index.js – HTTPS with redirect + HTML form + upload support
+// index.js – HTTPS with redirect + HTML form + upload support + verbose logging
 (async () => {
   try {
     const express = require('express');
@@ -21,34 +21,40 @@
 
     const upload = multer({ dest: UPLOADS_DIR });
 
-    // ──────────────────────────
-    // One-off startup checks
-    // ──────────────────────────
+    console.log('🔧 Starting server setup...');
+
     [BASE_DIR, UPLOADS_DIR].forEach(dir => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         console.log(`✅ Created directory: ${dir}`);
+      } else {
+        console.log(`ℹ️ Directory exists: ${dir}`);
       }
     });
 
     if (!fs.existsSync(MODELS_FILE)) {
       fs.writeFileSync(MODELS_FILE, '[]', 'utf-8');
       console.log('✅ Created models.json file');
+    } else {
+      console.log('ℹ️ models.json exists');
     }
 
-    // ──────────────────────────
-    // HTTPS Application
-    // ──────────────────────────
     const app = express();
     app.use(express.json());
 
-    // Serve index.html and items.html
-    app.get('/', (req, res) => res.sendFile(path.join(HTML_DIR, 'index.html')));
-    app.get('/items', (req, res) => res.sendFile(path.join(HTML_DIR, 'items.html')));
+    app.get('/', (req, res) => {
+      console.log('📄 Serving index.html');
+      res.sendFile(path.join(HTML_DIR, 'index.html'));
+    });
 
-    // GET /models
+    app.get('/items', (req, res) => {
+      console.log('📄 Serving items.html');
+      res.sendFile(path.join(HTML_DIR, 'items.html'));
+    });
+
     app.get('/models', (req, res) => {
       try {
+        console.log('📥 GET /models requested');
         const data = fs.readFileSync(MODELS_FILE, 'utf-8');
         res.json(JSON.parse(data));
       } catch (err) {
@@ -57,40 +63,52 @@
       }
     });
 
-    // POST /unzip (from URL)
     app.post('/unzip', async (req, res) => {
       const { url, folderName, DisplayName, BuildName } = req.body;
+      console.log('📬 POST /unzip called with:', req.body);
+
       if (!url || !folderName || !DisplayName || !BuildName) {
+        console.warn('⚠️ Missing required fields');
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
       const outputDir = path.join(BASE_DIR, folderName);
-      console.log(`📥 Downloading from: ${url}`);
-      console.log(`📂 Extracting to: ${outputDir}`);
+      console.log(`📥 Downloading ZIP from ${url}`);
+      console.log(`📂 Extracting to ${outputDir}`);
 
       try {
-        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+          console.log(`✅ Created output directory: ${outputDir}`);
+        }
 
         const response = await fetch(url, { redirect: 'follow' });
+        console.log(`📡 Response status: ${response.status}`);
         if (!response.ok) throw new Error(`Failed to download zip: ${response.statusText}`);
 
         const contentType = response.headers.get('content-type') || '';
+        console.log(`📦 Content-Type: ${contentType}`);
         if (!contentType.includes('application/zip') && !contentType.includes('application/octet-stream')) {
           throw new Error(`Unexpected content-type: ${contentType}`);
         }
 
         const buffer = Buffer.from(await response.arrayBuffer());
+        console.log(`📏 Downloaded file size: ${buffer.length} bytes`);
+
         if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
           throw new Error('Downloaded file is not a valid ZIP archive (missing PK signature)');
         }
 
         const directory = await unzipper.Open.buffer(buffer);
+        console.log(`📁 Found ${directory.files.length} files in zip`);
+
         await Promise.all(directory.files.map(file => {
           if (file.type === 'Directory') return;
           const relativePath = file.path.split('/').slice(1).join(path.sep);
           const outputPath = path.join(outputDir, relativePath);
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
+          console.log(`➡️ Extracting file: ${relativePath}`);
           return new Promise((resolve, reject) => {
             file.stream()
               .pipe(fs.createWriteStream(outputPath))
@@ -104,7 +122,7 @@
         currentModels.push(newModel);
         fs.writeFileSync(MODELS_FILE, JSON.stringify(currentModels, null, 2), 'utf-8');
 
-        console.log('✅ Extraction complete and model saved');
+        console.log('✅ Model metadata saved:', newModel);
         res.json({ message: 'Zip extracted and model stored', model: newModel });
 
       } catch (err) {
@@ -113,12 +131,15 @@
       }
     });
 
-    // POST /upload (from form)
     app.post('/upload', upload.single('file'), async (req, res) => {
+      console.log('📬 POST /upload received');
+
       const { DisplayName, folderName, BuildName } = req.body;
       const file = req.file;
+      console.log('📤 File metadata:', file);
 
       if (!file || !DisplayName || !folderName || !BuildName) {
+        console.warn('⚠️ Missing file or required fields');
         return res.status(400).json({ error: 'Missing file or required fields.' });
       }
 
@@ -127,6 +148,7 @@
 
       try {
         const buffer = fs.readFileSync(zipPath);
+        console.log(`📏 Uploaded file size: ${buffer.length} bytes`);
         if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
           throw new Error('Uploaded file is not a valid ZIP archive.');
         }
@@ -134,13 +156,15 @@
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
         const directory = await unzipper.Open.buffer(buffer);
+        console.log(`📁 Extracting ${directory.files.length} files`);
+
         await Promise.all(directory.files.map(file => {
           if (file.type === 'Directory') return;
-
           const relativePath = file.path.split('/').slice(1).join(path.sep);
           const outputPath = path.join(outputDir, relativePath);
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
+          console.log(`➡️ Extracting: ${relativePath}`);
           return new Promise((resolve, reject) => {
             file.stream()
               .pipe(fs.createWriteStream(outputPath))
@@ -154,69 +178,63 @@
         currentModels.push(newModel);
         fs.writeFileSync(MODELS_FILE, JSON.stringify(currentModels, null, 2), 'utf-8');
 
-        fs.unlinkSync(zipPath); // Cleanup
-        console.log('✅ Uploaded ZIP extracted and model saved');
+        fs.unlinkSync(zipPath);
+        console.log('✅ Upload complete and cleaned up:', newModel);
         res.json({ message: 'Upload successful', model: newModel });
       } catch (err) {
         console.error('❌ Error during file upload:', err);
         res.status(500).json({ error: err.message });
       }
     });
+
     app.delete('/models/:folderName', (req, res) => {
-  const folderName = req.params.folderName;
+      const folderName = req.params.folderName;
+      console.log(`🗑️ DELETE /models/${folderName}`);
 
-  try {
-    // Load models
-    const models = JSON.parse(fs.readFileSync(MODELS_FILE, 'utf-8'));
+      try {
+        const models = JSON.parse(fs.readFileSync(MODELS_FILE, 'utf-8'));
+        const filtered = models.filter(m => m.FolderName !== folderName);
 
-    // Remove matching model
-    const filtered = models.filter(m => m.FolderName !== folderName);
+        if (filtered.length === models.length) {
+          console.warn('⚠️ Model not found');
+          return res.status(404).json({ error: 'Model not found' });
+        }
 
-    // If nothing changed
-    if (filtered.length === models.length) {
-      return res.status(404).json({ error: 'Model not found' });
-    }
+        fs.writeFileSync(MODELS_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
 
-    // Save updated list
-    fs.writeFileSync(MODELS_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
+        const folderPath = path.join(BASE_DIR, folderName);
+        if (fs.existsSync(folderPath)) {
+          fs.rmSync(folderPath, { recursive: true, force: true });
+          console.log(`✅ Deleted folder: ${folderPath}`);
+        }
 
-    // Delete extracted folder
-    const folderPath = path.join(BASE_DIR, folderName);
-    if (fs.existsSync(folderPath)) {
-      fs.rmSync(folderPath, { recursive: true, force: true });
-      console.log(`🗑️ Deleted folder: ${folderPath}`);
-    }
+        res.json({ message: 'Model deleted' });
+      } catch (err) {
+        console.error('❌ Failed to delete model:', err);
+        res.status(500).json({ error: 'Failed to delete model' });
+      }
+    });
 
-    res.json({ message: 'Model deleted' });
-  } catch (err) {
-    console.error('❌ Failed to delete model:', err);
-    res.status(500).json({ error: 'Failed to delete model' });
-  }
-});
-
-
-    // HTTPS server
     const httpsOptions = {
       key: fs.readFileSync(SSL_KEY_PATH),
       cert: fs.readFileSync(SSL_CERT_PATH),
     };
 
     https.createServer(httpsOptions, app).listen(HTTPS_PORT, '0.0.0.0', () => {
-      console.log(`✅ HTTPS server listening on https://0.0.0.0:${HTTPS_PORT}`);
+      console.log(`✅ HTTPS server listening at https://0.0.0.0:${HTTPS_PORT}`);
     });
 
-    // HTTP → HTTPS redirect server
     const redirectApp = express();
     redirectApp.use((req, res) => {
       const originalHost = req.headers.host;
       const redirectHost = originalHost?.replace(/:\d+$/, `:${HTTPS_PORT}`);
       const targetUrl = `https://${redirectHost}${req.url}`;
-      console.log(`🔁 Redirecting HTTP → HTTPS: ${req.method} http://${originalHost}${req.url} → ${targetUrl}`);
+      console.log(`🔁 HTTP → HTTPS redirect: ${req.method} → ${targetUrl}`);
       res.redirect(targetUrl);
     });
 
     redirectApp.listen(HTTP_PORT, '0.0.0.0', () => {
-      console.log(`🔁 HTTP redirect server on http://0.0.0.0:${HTTP_PORT}`);
+      console.log(`🔁 HTTP redirect server listening at http://0.0.0.0:${HTTP_PORT}`);
     });
 
   } catch (e) {

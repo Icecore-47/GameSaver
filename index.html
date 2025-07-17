@@ -2,65 +2,84 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Upload ZIP</title>
+  <title>Upload ZIP Model</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-800">
-  <div class="min-h-screen flex items-center justify-center px-4">
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-      <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold">Upload Game Build</h1>
-        <a href="/items"
-           class="text-blue-600 hover:underline text-sm font-medium transition duration-150 ease-in-out">
-          📋 View Items
-        </a>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+
+  <div class="bg-white shadow-xl rounded-lg p-8 w-full max-w-lg space-y-6">
+    <h1 class="text-2xl font-bold text-gray-800 text-center">📤 Upload ZIP Model</h1>
+
+    <!-- Alert -->
+    <div id="alertBox" class="hidden text-sm rounded px-4 py-3"></div>
+
+    <!-- Upload Form -->
+    <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
+      <div>
+        <label for="DisplayName" class="block text-sm font-medium text-gray-700">Display Name</label>
+        <input type="text" name="DisplayName" id="DisplayName" required
+          class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:ring focus:ring-blue-200">
       </div>
 
-      <form id="uploadForm" class="space-y-4" enctype="multipart/form-data" method="POST" action="/upload">
-        <div>
-          <label class="block font-medium mb-1" for="DisplayName">Display Name</label>
-          <input type="text" id="DisplayName" name="DisplayName" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-        </div>
+      <div>
+        <label for="folderName" class="block text-sm font-medium text-gray-700">Folder Name</label>
+        <input type="text" name="folderName" id="folderName" required
+          class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:ring focus:ring-blue-200">
+      </div>
 
-        <div>
-          <label class="block font-medium mb-1" for="folderName">Folder Name</label>
-          <input type="text" id="folderName" name="folderName" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-        </div>
+      <div>
+        <label for="BuildName" class="block text-sm font-medium text-gray-700">Build Name</label>
+        <input type="text" name="BuildName" id="BuildName" required
+          class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:ring focus:ring-blue-200">
+      </div>
 
-        <div>
-          <label class="block font-medium mb-1" for="BuildName">Build Name</label>
-          <input type="text" id="BuildName" name="BuildName" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-        </div>
+      <div>
+        <label for="file" class="block text-sm font-medium text-gray-700">ZIP File</label>
+        <input type="file" name="file" id="file" accept=".zip" required
+          class="mt-1 block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100" />
+      </div>
 
-        <div>
-          <label class="block font-medium mb-1" for="file">ZIP File</label>
-          <input type="file" id="file" name="file" accept=".zip" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-blue-600 file:text-white hover:file:bg-blue-700"/>
-        </div>
+      <button type="submit"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded flex items-center justify-center gap-2 transition duration-150">
+        <span id="uploadText">Upload</span>
+        <svg id="spinner" class="hidden w-5 h-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor"
+            d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </button>
 
-        <button type="submit"
-          class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200">
-          Upload ZIP
-        </button>
-      </form>
-
-      <div id="statusMsg" class="mt-4 text-center font-medium hidden"></div>
-    </div>
+      <div class="text-center text-sm mt-4">
+        <a href="/items" class="text-blue-600 hover:underline">📄 View Uploaded Models</a>
+      </div>
+    </form>
   </div>
 
   <script>
     const form = document.getElementById('uploadForm');
-    const statusMsg = document.getElementById('statusMsg');
+    const alertBox = document.getElementById('alertBox');
+    const spinner = document.getElementById('spinner');
+    const uploadText = document.getElementById('uploadText');
+
+    function showAlert(message, type = 'success') {
+      alertBox.className = `block text-sm px-4 py-3 rounded ${
+        type === 'success'
+          ? 'bg-green-100 text-green-700 border border-green-300'
+          : 'bg-red-100 text-red-700 border border-red-300'
+      }`;
+      alertBox.textContent = message;
+    }
+
+    function setLoading(isLoading) {
+      spinner.classList.toggle('hidden', !isLoading);
+      uploadText.textContent = isLoading ? 'Uploading...' : 'Upload';
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      statusMsg.classList.add('hidden');
-      statusMsg.textContent = '';
-      statusMsg.className = 'mt-4 text-center font-medium hidden';
+      setLoading(true);
+      alertBox.classList.add('hidden');
 
       const formData = new FormData(form);
 
@@ -73,17 +92,15 @@
         const result = await res.json();
 
         if (res.ok) {
-          statusMsg.textContent = '✅ Upload successful!';
-          statusMsg.classList.remove('hidden');
-          statusMsg.classList.add('text-green-600');
+          showAlert('✅ Upload successful!', 'success');
           form.reset();
         } else {
-          throw new Error(result.error || 'Unknown error');
+          showAlert('❌ Upload failed: ' + result.error, 'error');
         }
       } catch (err) {
-        statusMsg.textContent = '❌ Upload failed: ' + err.message;
-        statusMsg.classList.remove('hidden');
-        statusMsg.classList.add('text-red-600');
+        showAlert('❌ Network error: ' + err.message, 'error');
+      } finally {
+        setLoading(false);
       }
     });
   </script>
